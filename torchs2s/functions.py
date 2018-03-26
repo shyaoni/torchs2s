@@ -112,12 +112,12 @@ def rnn(cell, inputs=None,
     while hidden is not None:
         step += 1
         finished, x = helper.next(output, step=step)
-
         cur_batch_size = tur.len(x, 0)
 
         not_finished, subbed = utils.list_sub(not_finished, finished)
  
         output, hidden = cell(x, hidden)
+
         cur_outputs.append(output)
 
         for i in subbed:
@@ -149,7 +149,7 @@ def rnn(cell, inputs=None,
             not_finished = list(range(len(not_finished)))
 
     outputs = tur.cat(outputs, dim=0)
-    final_states = tur.cat(final_states, dim=0)
+    final_states = tur.stack(final_states, dim=0)
 
     if queue is None:
         return outputs, final_states, lengths

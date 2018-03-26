@@ -2,13 +2,15 @@ import torch
 import functools
 import collections
 
-from torch import Tensor
+import torch
 from torch.nn import Parameter
 from torch.autograd import Variable
 from IPython import embed
 
 def is_tensor(tensor):
-    return isinstance(tensor, Tensor) or isinstance(tensor, Variable)
+    return isinstance(tensor, Variable) or \
+           isinstance(tensor, torch.FloatTensor) or \
+           isinstance(tensor, torch.LongTensor)
 
 class Tuplize(): 
     def __init__(self):
@@ -18,6 +20,24 @@ class Tuplize():
         if name not in self.cache:
             self.cache[name] = functools.partial(self.func, name)
         return self.cache[name]
+
+    @staticmethod
+    def views(tensors, *args):
+        if is_tensor(tensors):
+            shape_to = []
+            for p in args:
+                if isinstance(p, slice):
+                    shape_to += list(tensors.shape[p])
+                elif isinstance(p, collections.Sequence):
+                    shape_to += p
+                else:
+                    shape_to += [p]
+            return tensors.view(shape_to)
+        elif isinstance(tensors, collections.Sequence):
+            return [Tuplize.views(t, *args) for t in tensors]
+        else:
+            raise ValueError
+            
 
     @staticmethod
     def func(name, tensors, *args, **kwargs): 
