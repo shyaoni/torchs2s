@@ -102,7 +102,7 @@ class Tuplize():
                 raise NotImplementedError
             
             data = tensors
-            if not isinstance(data, torch.Tensor):
+            if isinstance(data, Variable):
                 data = data.data
 
             padding_part = type(data)(*lst)

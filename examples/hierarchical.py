@@ -16,29 +16,29 @@ if __name__ == '__main__':
     model.cuda()
 
     optimizer = torch.optim.Adam(model.parameters())
- 
+
     step = 0
     while True:
-        inputs = torch.autograd.Variable(torch.randn(10, 3, 10, 100).cuda())
-        lengths = torch.from_numpy(np.random.randint(10, size=(3, 10)))
-        lengths[0] = 10
+        inputs = torch.autograd.Variable(torch.randn(100, 10, 30, 100).cuda())
+        lengths = torch.from_numpy(np.random.randint(100, size=(10, 30)))
+        lengths = 100
         outputs, final_states, lengths = model(inputs, max_lengths=lengths,
                                                num_workers=1)
 
         cnt = 0
-        mask = torch.zeros(3, 10).cuda() 
+        mask = torch.zeros(10, 30).cuda()
         for i, l in enumerate(lengths):
             mask[:l, i] = 1
             cnt += l
 
-        mask = torch.autograd.Variable(mask)
+        mask = torch.autograd.Variable(mask) 
 
-        loss = ((inputs[9, :, :, :] - outputs)**2).sum(dim=2) * mask
+        loss = ((inputs[99, :, :, :] - outputs)**2).sum(dim=2)
         loss = loss.sum() / cnt
-        
+
         print(step, loss)
 
-        optimizer.zero_grad() 
+        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
