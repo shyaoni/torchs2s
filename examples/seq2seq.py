@@ -39,7 +39,7 @@ class Model(tnn.Module):
         self.mediam = tnn.Linear(600, 400)
 
         loader = GloveLoader(
-            200, path='/space/hzt/word_embed/glove/glove.6B.200d.txt') 
+            200, path='...(some_path_to_glove') 
         self.embedder = Embedder(vocab, load=loader, 
             init_func=lambda a,b: torch.randn(b), padding_idx=0) 
 
