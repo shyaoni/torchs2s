@@ -22,6 +22,18 @@ def list_sub(lst, removed):
             subbed.append(x)
     return remain, subbed
 
+def mask(lengths):
+    shape = lengths.shape
+
+    lengths = lengths.view(-1)
+    p = lengths.max()
+    
+    tensor = torch.zeros(p, lengths.shape[0])
+    for i, l in enumerate(lengths):
+        tensor[:l, i] = 1
+
+    return tensor
+
 class TrackerState():
     def __init__(self, nodes, status):
         self.status = status 
