@@ -8,8 +8,6 @@ from torch.autograd import Variable
 import torchs2s.utils as utils
 from torchs2s.tuplize import tuplizer as tur
 
-from IPython import embed
-
 class Helper():
     def __init__(self, lengths=None, batch_size=None):
         self.set_lengths(lengths, batch_size)
@@ -95,7 +93,7 @@ class SoftmaxHelper(Helper):
         self.bos_idx = bos_idx
         super().__init__(int(1e8) if lengths is None else lengths, 1)
 
-    def next(self, output, step=1): 
+    def next(self, output, step=1, **kwargs): 
         if isinstance(output, int):
             return [], torch.stack([self.embedding[self.bos_idx],] * output, 0)
   
@@ -109,13 +107,16 @@ class SoftmaxHelper(Helper):
         if isinstance(pred, Variable):
             pred = pred.data
 
+        if kwargs.get('pred', False):
+            return pred
+
         finished = []
         batch_size = output.shape[0]
 
         for i in range(batch_size):
             if len(self.lengths) > 1 and self.lengths[i] <= step:
                 finished.append(i)
-            elif len(self.lengths) == 0 and self.lengths[0] <= step:
+            elif len(self.lengths) == 1 and self.lengths[0] <= step:
                 finished.append(i)
             elif pred[i] == self.eos_idx:
                 finished.append(i)

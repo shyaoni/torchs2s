@@ -4,8 +4,9 @@ import torch
 import torchs2s.utils as utils
 
 from torch.nn import Embedding 
+from torch.nn.functional import normalize
 
-def get_init_func(dim, init_func=None, initializer=None):
+def get_init_func(dim, init_func=None, initializer=None, **kwargs):
     if initializer is None:
         initializer = lambda dim: torch.randn(dim)
     if init_func is None:
@@ -19,7 +20,12 @@ def complete_with_init_func(dim, vocab, tensors, **kwargs):
     for i, tensor in enumerate(tensors):
         if tensor is None:
             tensors[i] = init_func(vocab.itos[i], dim)
-    return torch.stack(tensors, dim=0)
+    res = torch.stack(tensors, dim=0)
+
+    if kwargs.get('normalize', False):
+        res = normalize(res)
+    return res
+
 
 def load_from_glove(dim, vocab, path, **kwargs):
     tensors = [None,] * vocab.size
@@ -48,7 +54,7 @@ def load_from(dim, vocab, load=None, path=None, **kwargs):
 class Embedder(Embedding):
     def __init__(self, dim, vocab, 
                  load=None, path=None, init_func=None, initializer=None, 
-                 **kwargs):
+                 normalize=False, **kwargs):
         tensor = load_from(dim, vocab, load, path, **kwargs)
         super().__init__(tensor.shape[0], tensor.shape[1], **kwargs)
         self.weight.data.copy_(tensor)

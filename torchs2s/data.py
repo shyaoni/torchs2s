@@ -85,6 +85,27 @@ def get_shape_of_packed_seq(seqs):
         shape = np.maximum(shape, seq.shape())
     return shape.tolist()
 
+def depadding(tensor, lengths):
+    lsts = []
+    if lengths.dim() == 1:
+        lengths = lengths.tolist()
+        batch_size = tensor.shape[1]
+        tensor = tensor.transpose(0, 1).contiguous() 
+        for i in range(batch_size):
+            lsts.append(tensor[i, :lengths[i]].tolist())
+    elif lengths.dim() == 2:
+        lengths = lengths.transpose(0, 1).tolist()
+        batch_size, num_utts = tensor.shape[1], tensor.shape[2]
+        tensor = tensor.transpose(0, 2).contiguous() 
+        for i in range(batch_size):
+            lst = []
+            for j in range(num_utts): 
+                if lengths[i][j] == 0:
+                    break
+                lst.append(tensor[i, j, :lengths[i][j]].tolist())
+            lsts.append(lst)
+    return lsts
+
 def collate(samples):
     batch_size = len(samples)
 

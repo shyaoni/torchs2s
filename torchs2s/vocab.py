@@ -88,6 +88,12 @@ class Vocab():
     def __iter__(self):
         return iter(self.itos) 
 
+    def denumericalize(self, v):
+        if is_sequence(v):
+            return [self.denumericalize(x) for x in v]
+        else:
+            return self.itos[v]
+
     def recursive_numericalize(self, v):
         for i, x in enumerate(v):
             if is_sequence(x):
