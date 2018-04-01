@@ -1,16 +1,15 @@
 from torchs2s.rnn import RNNCell, RNN
+from torchs2s.utils import mask
 
 import torch
 
-from IPython import embed
 
 import numpy as np
 
 torch.cuda.set_device(1)
 
 if __name__ == '__main__':
-    x = RNNCell(100, 64)
-    model = RNN(x)
+    model = RNN(RNNCell(100, 64))
     model.cuda()
 
     optimizer = torch.optim.Adam(model.parameters())
@@ -20,19 +19,17 @@ if __name__ == '__main__':
         inputs = torch.autograd.Variable(torch.randn(100, 64, 100).cuda())
         lengths = torch.from_numpy(np.random.randint(100, size=(64, )))
         lengths[0] = 100
+
+        lengths, indices = lengths.sort(descending=True)
+
         outputs, final_states, lengths = model(inputs, max_lengths=lengths,
-                                               num_workers=1)
+                                               reduced_fn='every')
 
         cnt = 0
-        mask = torch.zeros(100, 64).cuda() 
-        for i, l in enumerate(lengths):
-            mask[:l, i] = 1
-            cnt += l
 
-        mask = torch.autograd.Variable(mask)
-
-        loss = ((inputs[:, :, :64] - outputs)**2).sum(dim=2) * mask
-        loss = loss.sum() / cnt
+        msk = torch.autograd.Variable(mask(lengths).cuda())
+        loss = ((inputs[:, :, :64] - outputs)**2).sum(dim=2) * msk
+        loss = loss.sum() / msk.sum()
         
         print(step, loss)
 

@@ -1,19 +1,16 @@
 from torchs2s.rnn import GRUCell, HierarchicalRNN, RNN
-from torchs2s.data import Field, FieldData, collate
+from torchs2s.field import Field
+from torchs2s.data import PackedSeq, collate
 from torchs2s.vocab import Vocab
 from torchs2s.utils import mask
 from torchs2s.helper import TensorHelper
+from torchs2s.capture import get_handle
+from torchs2s.embedder import Embedder
 
 import torch.nn as tnn
 import torch
-
-from torch.autograd import Variable 
-
+from torch.autograd import Variable
 from torch.utils.data import DataLoader
-
-from torchs2s.embedder import GloveLoader, Embedder
-
-from IPython import embed
 
 class Dataset():
     def __init__(self, source, target):
@@ -24,53 +21,45 @@ class Dataset():
         return len(self.dts_tgt)
 
     def __getitem__(self, idx):
-        src = FieldData(self.dts_src[idx]).level('dialog')
-        tgt = FieldData(self.dts_tgt[idx])
+        src = PackedSeq(self.dts_src[idx]).dialog()
+        tgt = PackedSeq(self.dts_tgt[idx]).sentence()
         return src, tgt
 
 class Model(tnn.Module):
-    def __init__(self, vocab):
+    def __init__(self):
         super().__init__()
+
         self.encoder = HierarchicalRNN(
-            RNN(GRUCell(200, 300)),
-            RNN(GRUCell(300, 600)))
+            RNN(GRUCell(200, 300)), RNN(GRUCell(300, 600)))
 
+        self.medium = tnn.Linear(600, 400)
         self.decoder = RNN(GRUCell(200, 400))
-        self.mediam = tnn.Linear(600, 400)
-
-        loader = GloveLoader(
-            200, path='...(some_path_to_glove') 
-        self.embedder = Embedder(vocab, load=loader, 
-            init_func=lambda a,b: torch.randn(b), padding_idx=0) 
 
         self.output_cvt = tnn.Linear(400, 200)
 
     def forward(self, x, helper=None, **kwargs):
-        final_states = self.encoder(self.embedder(x), **kwargs)[1]
-
+        encoder_states = self.encoder(self.embedder(x), **kwargs)[1]
+        
         outputs, final_states, lengths = self.decoder(
-            init_hidden=self.mediam(final_states),
-            helper=helper)
+            init_hidden=self.medium(encoder_states),
+            helper=helper) 
 
         return self.output_cvt(outputs), final_states, lengths
 
 if __name__ == '__main__':
-
-    field = Field(delimiter='|||',
-                  tokenizer=' ')
-
     dataset = Dataset('../data/source.txt', '../data/target.txt')
-    handle = field(dataset)
+    handle = get_handle(dataset, str)
 
-    vocab = Vocab([field, handle], max_size=10000)
-    vocab([handle])
-    
+    field = Field(delimiter='|||', tokenizer=' ')
+    field(handle)
+    vocab = Vocab([field, handle], max_size=1000)
+    vocab(handle)
+ 
     loader = DataLoader(dataset, batch_size=64, shuffle=True,
                         collate_fn=collate)
 
-    model = Model(vocab)
-    model.embedder = model.embedder
-
+    model = Model()
+    model.embedder = Embedder(200, vocab) 
     model.cuda()
 
     num_epochs = 1000
@@ -85,20 +74,16 @@ if __name__ == '__main__':
             target, tgt_len = target
             target = Variable(target.cuda())
             target = model.embedder(target)
-            tgt_len = tgt_len - 1
 
-            helper = TensorHelper(target[:-1], tgt_len) 
+            helper = TensorHelper(target[:-1], tgt_len - 1)
 
-            outputs = model(
-                inputs, helper=helper,
-                max_lengths_minor=max_lengths_minor,  
-                max_lengths_major=max_lengths_major)[0]
+            outputs = model(inputs, helper=helper,
+                max_lengths=max_lengths_minor)[0]
 
-            loss = ((outputs-target[1:])**2).sum(dim=2) * Variable(
-                        mask(tgt_len).cuda())
-            
-            loss = loss.sum() / tgt_len.sum() 
+            msk = Variable(mask(tgt_len-1).cuda())
 
+            loss = ((outputs-target[1:])**2).sum(dim=2) * msk
+            loss = loss.sum() / msk.sum()
 
             step += 1
             print('step {} on epoch {}: {}'.format(step, i, loss.data[0])) 

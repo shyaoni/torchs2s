@@ -3,57 +3,53 @@ import torch
 
 import torchs2s.utils as utils
 
-from torch.nn import Embedding
+from torch.nn import Embedding 
 
-class Loader():
-    pass
+def get_init_func(dim, init_func=None, initializer=None):
+    if initializer is None:
+        initializer = lambda dim: torch.randn(dim)
+    if init_func is None:
+        init_func = lambda x, dim: torch.randn(dim)
+    return init_func
 
-class GloveLoader(Loader):
-    def __init__(self, dim, path=None, cache=None):
-        self.dim = dim
-        self.path = path
-        
-    def __call__(self, vocab, init_func):
-        print('Get embedding weights for {} from {}...'.format(
-            vocab, self.path))
+def complete_with_init_func(dim, vocab, tensors, **kwargs):
+    init_func = get_init_func(dim, **kwargs)
+    if tensors is None:
+        tensors = [None,] * vocab.size
+    for i, tensor in enumerate(tensors):
+        if tensor is None:
+            tensors[i] = init_func(vocab.itos[i], dim)
+    return torch.stack(tensors, dim=0)
 
-        tensor = [0,] * vocab.size
+def load_from_glove(dim, vocab, path, **kwargs):
+    tensors = [None,] * vocab.size
+    with open(path, 'r') as f:
+        for line in f:
+            vecs = line.strip().split(' ')
+            word, vecs = vecs[0], vecs[1:]
+            dim = len(vecs)
 
-        dim = self.dim
-        
-        founds = []
-        with open(self.path, 'r') as f:
-            for line in tqdm(f): 
-                vec = line.strip().split()
-                if len(vec) == 0:
-                    continue
-                word, vec = vec[0], vec[1:]
-                if word not in vocab.stoi:
-                    continue
-                if len(vec) != dim:
-                    raise ValueError
-
+            if word in vocab.stoi:
                 idx = vocab.stoi[word]
-                tensor[idx] = torch.FloatTensor([float(v) for v in vec])
-                founds.append(idx)
+                tensors[idx] = torch.FloatTensor([float(v) for v in vecs])
 
-        not_found, _ = utils.list_sub(list(range(vocab.size)), founds)
-        for i in not_found:
-            if init_func is not None:
-                tensor[i] = init_func(vocab.itos[i], dim)
+    return complete_with_init_func(dim, vocab, tensors, **kwargs)
 
-        return torch.stack(tensor, dim=0) 
+def load_from(dim, vocab, load=None, path=None, **kwargs):
+    if load is None:
+        load = 'glove'
 
-def load_from(vocab, load, init_func):
-    if isinstance(load, Loader):
-        return load(vocab, init_func)
-    else:
-        raise NotImplementedError
+    if isinstance(load, str):
+        if path is None:
+            return complete_with_init_func(dim, vocab, None, **kwargs) 
+        if load == 'glove':
+            return load_from_glove(dim, vocab, path, **kwargs) 
 
 class Embedder(Embedding):
-    def __init__(self, vocab, load='', init_func=None, 
+    def __init__(self, dim, vocab, 
+                 load=None, path=None, init_func=None, initializer=None, 
                  **kwargs):
-        tensor = load_from(vocab, load, init_func)
+        tensor = load_from(dim, vocab, load, path, **kwargs)
         super().__init__(tensor.shape[0], tensor.shape[1], **kwargs)
         self.weight.data.copy_(tensor)
 
@@ -62,6 +58,5 @@ class Embedder(Embedding):
             return super().forward(x)
         else:
             shape = x.shape + (self.embedding_dim, )
-            return super().forward(x.view(-1, x.shape[-1])).view(shape)
-             
+            return super().forward(x.view(-1, x.shape[-1])).view(shape) 
 

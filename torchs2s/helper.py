@@ -3,26 +3,24 @@ import numpy as np
 import torch
 import torch.nn as tnn
 import torch.functional as tfunc
+from torch.autograd import Variable
 
 import torchs2s.utils as utils
 from torchs2s.tuplize import tuplizer as tur
 
-from collections import Sequence
-
-from IPython import embed
-
 class Helper():
-    def __init__(self):
-        pass
-
-    def next(self, output=None, step=None):
-        raise NotImplementedError
-
-    def split(self, num_workers):
-        raise NotImplementedError 
+    def __init__(self, lengths=None):
+        self.lengths = lengths
+        if isinstance(self.lengths, torch.Tensor):
+            self.lengths = lengths.tolist()
+        elif isinstance(self.lengths, int): 
+            self.lengths = [self.lengths,] * self.batch_size
+        elif self.lengths is None:
+            self.lengths = [inputs.shape[0],] * self.batch_size
 
 class TensorHelper(Helper):
-    """A helper that use prior inputs to feed the encoder. 
+    """A helper that use prior inputs to feed the rnn, usually used by encoders,
+    and decoders in training.
     Args:
         inputs: Tensor(s) that each takes shape (times, batch_size, ...).
         lengths (optional): An 1-D list, tensor, np.ndarray with length of
@@ -31,19 +29,8 @@ class TensorHelper(Helper):
     """
     def __init__(self, inputs, lengths=None):
         self.inputs = inputs
-        self.lengths = lengths
-        self.pos = 0
-
-        batch_size = tur.len(inputs, 1)
-
-        if isinstance(self.lengths, torch.Tensor):
-            self.lengths = lengths.tolist()
-        elif isinstance(self.lengths, int): 
-            self.lengths = [self.lengths,] * batch_size
-        elif self.lengths is None:
-            self.lengths = [inputs.shape[0],] * batch_size
-
-        self.batch_size = batch_size
+        self.batch_size = tur.len(inputs, 1)
+        super().__init__(inputs.shape[0] if lengths is None else lengths)
         self.index = np.argsort(self.lengths).tolist()
    
     def next(self, output=None, step=1):
@@ -79,23 +66,41 @@ class TensorHelper(Helper):
 
         return finished, tur.get(self.inputs[step-1], sorted(index))
 
-    def split(self, num_workers): 
-        batch_size = self.batch_size
-        step = (self.batch_size - 1) // num_workers + 1
-        helpers = []
-        for s in range(0, batch_size, step):
-            e = min(batch_size, s + step)
-            helpers.append(
-                TensorHelper(tur.get(self.inputs, slice(None), slice(s, e)), 
-                             self.lengths[s:e]))
+class SoftmaxHelper(Helper):
+    """A helper for decoder during inference. In default, It uses dot product 
+    to compute the similarities, and then apply softmax to compute the 
+    distribution D. The sum over D is then regarded as the next input.
+    Args:
+        embedding: The embedding matrix to use, should be [vocab_size, dims].
+        ending_idx: The end-of-sentence token's id.
+        lengths (optional): An 1-D list, tensor, np.ndarray with length of
+                            batch_size.
+                            Or an integer applied to the whole batch.
 
-        return helpers
+    """
+    def __init__(self, embedding, ending_idx=-1, lengths=None):
+        self.embedding = embedding
+        self.ending_idx = endding_idx
+        self.batch_size = 1      
+        super().__init__(int(1e8) if lengths is None else lengths)
 
-if __name__ == '__main__':
-    from IPython import embed
-    
-    x = torch.randn((100, 64, 100))
-    lengths = np.random.randint(64, size = (64, ))
-    helper = TensorHelper(x, lengths=lengths)
+    def next(self, output, step=1): 
+        dist = tfunc.softmax(torch.mv(self.embedding, output), dim=1)
+        next_input = torch.mm(dist, self.embedding)
 
-    embed()
+        # get finished samples
+        pred = dist.max(dim=1)[1]
+        if isinstance(pred, Variable):
+            pred = pred.data
+
+        finished = []
+        batch_size = output.shape[0]
+        for i in range(batch_size):
+            if len(self.lengths) > 1 and self.lengths[i] <= step:
+                finished.append(i)
+            elif len(self.lengths) == 0 and self.lengths[0] <= step:
+                finished.append(i)
+            elif pred[i] == ending_idx:
+                finished.append(i)
+
+        return finished, next_input

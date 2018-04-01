@@ -11,13 +11,24 @@ import collections
 
 from IPython import embed
 
+class ReducedFunc():
+    @staticmethod
+    def halver(a, b):
+        """ halver(batch_size, num_not_finished) <- 
+                num_not_finished <= batch_size // 2
+        """
+        return b <= a//2
+    def every(a, b):
+        """ every(batch_size, num_not_finished) <- 
+                num_not_finished < batch_size
+        """
+        return b < a
+
 def rnn(cell, inputs=None,
         init_hidden=None,
         helper=None,
         max_lengths=None,
-        reduced_fn=None,
-        num_workers=1,
-        queue=None):
+        reduced_fn=None):
     """Run cell recursively, suitable for both decoding and encoding.
     Args:
         cell: torch.nn.Module. The cell to be run.
@@ -25,7 +36,8 @@ def rnn(cell, inputs=None,
                                 If not provided, cell.init_hidden() is used.                   
         inputs (optional): Tensor(s). The inputs for the rnn, each takes shape
                            (times, batch_size, ...).
-                           It will be used only when helper is not given.
+                           It will be used to construct a `TensorHelper` 
+                           only when helper is not given.
         helper (optional): Use helper to convert the output at current step
                            to the input at next step.
                            It must be declared if inputs is not given.
@@ -33,74 +45,34 @@ def rnn(cell, inputs=None,
                                Only used when helper is None.
         reduced_fn (optional): A callable to determine the time to reduce 
                                batch_size. It will be called by
-                                 reduced_fn(batch_size, num_finished) 
+                                 reduced_fn(batch_size, num_not_finished) 
                                and return `True` if reduce or otherwise `False`.
 
                                You can use built-in function by the str of 
-                               its name, see torchs2s.function.reduced_fn for
-                               details.
-                               If not given, batch_size is reduced whenever
-                               the number of finished samples is more than half.
-        num_workers (optional): The number of threads for multiprocessing, 
-                                default set to 1.
-                                Notices that rnn still runs in one device. If
-                                you want to use multi-GPUs, wrap the module
-                                class with torch.nn.DataParallel.
-    
-          
-        queue: cannot be used explicitly. 
-
-        NOT IMPLEMENTED YET: num_workers, reduced_fn
-
-        num_workers can only be 1 now! (before pytorch 0.4)
+                               its name, see torchs2s.functions.ReducedFunc 
+                               for details. If not given, batch_size is 
+                               reduced whenever the number of finished samples 
+                               is more than half.
     """
-     
     if helper is None:
         helper = TensorHelper(inputs, lengths=max_lengths)
 
-    batch_size = helper.batch_size
+    if init_hidden is None:
+        batch_size = helper.batch_size
+    else:
+        batch_size = tur.len(init_hidden, 0)
 
     if init_hidden is None:
         init_hidden = cell.init_hidden()
-        init_hidden = tur.stack([init_hidden, ] * batch_size, dim=0) 
-    
-    if num_workers > 1:
-        raise NotImplementedError
-        if not isinstance(helper, collections.Sequence):
-            helpers = helper.split(num_workers)
-        else:
-            helpers = helper 
+        init_hidden = tur.stack([init_hidden, ] * batch_size, dim=0)
 
-        queues, processes = [], []
-        for i in range(num_workers):
-            q = mp.SimpleQueue()
-            p = mp.Process(target=rnn, args=(cell, init_hidden, None,
-                                             helpers[i], max_lengths, 
-                                             reduced_fn, 1, q))
-            processes.append(p)
-            queues.append(q)
-
-        for p in processes:
-            p.start()
-
-        outputs_g, final_states_g, lengths_g = [], [], []
-
-        for q in queues:
-            outputs, final_states, lengths = q.get()
-            outputs_g.append(outputs)
-            final_states_g.append(final_states)
-            lengths_g.append(lengths_g)
-
-        for p in processes:
-            p.join()
-            
-        outputs = tur.cat(outputs_g, dim=1)
-        final_states = tur.cat(final_states, dim=0)
-        lengths = tur.cat(lengths_g, dim=0)
-    
-        return outputs, final_states, lengths
+    if reduced_fn is None:
+        reduced_fn = ReducedFunc.halver
+    elif isinstance(reduced_fn, str):
+        reduced_fn = getattr(ReducedFunc, reduced_fn)
 
     index_order = list(range(batch_size))
+    trival_index_order = True
 
     outputs = []
     lengths = torch.LongTensor([0, ] * batch_size)
@@ -108,7 +80,6 @@ def rnn(cell, inputs=None,
     
     cur_outputs, not_finished = [], list(range(batch_size)) 
     output, hidden, step = None, init_hidden, 0
-
     while hidden is not None:
         step += 1
         finished, x = helper.next(output, step=step)
@@ -124,19 +95,30 @@ def rnn(cell, inputs=None,
             final_states[index_order[i]] = tur.get(hidden, i)
             lengths[index_order[i]] = step
 
-        if len(not_finished) <= cur_batch_size // 2: 
+        if reduced_fn(cur_batch_size, len(not_finished)): 
+            if sum(not_finished)*2 == len(not_finished)*(len(not_finished)-1):
+                trival_reduced = True
+            else:
+                trival_reduced = False
+
             if len(not_finished) == 0:
                 hidden = None
             else:
-                hidden = tur.get(hidden, not_finished) 
-                output = tur.get(output, not_finished)
+                if trival_reduced:
+                    hidden = tur.get(hidden, slice(None, len(not_finished))) 
+                    output = tur.get(output, slice(None, len(not_finished)))
+                else:
+                    hidden = tur.get(hidden, not_finished) 
+                    output = tur.get(output, not_finished)
             
             cur_outputs = tur.expand_to(
                 tur.stack(cur_outputs, dim=0), 1, batch_size) 
 
-            r_index = np.argsort(index_order).tolist()
-
-            outputs.append(tur.get(cur_outputs, slice(None), r_index))
+            if trival_index_order:
+                outputs.append(cur_outputs)
+            else:
+                r_index = np.argsort(index_order).tolist()
+                outputs.append(tur.get(cur_outputs, slice(None), r_index))
             cur_outputs = []
 
             index_remain, index_subbed = utils.list_sub(
@@ -145,17 +127,14 @@ def rnn(cell, inputs=None,
             index_order = np.array(index_order)[index_subbed].tolist() + \
                           np.array(index_order)[index_remain].tolist() + \
                           index_order[cur_batch_size:]
+            trival_index_order = trival_index_order & trival_reduced
 
             not_finished = list(range(len(not_finished)))
 
     outputs = tur.cat(outputs, dim=0)
     final_states = tur.stack(final_states, dim=0)
 
-    if queue is None:
-        return outputs, final_states, lengths
-    else:
-        # To do this, we require pytorch 0.4
-        queue.put((outputs, final_states, lengths))
+    return outputs, final_states, lengths
 
 if __name__ == '__main__':
     pass

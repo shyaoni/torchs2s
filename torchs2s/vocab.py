@@ -1,25 +1,20 @@
 import collections
-import torchs2s.utils as utils
-from torchs2s.data import Field
-
-from IPython import embed
-
-class VocabCounter(collections.Counter):
-    def update_one(self, s):
-        self.update([s])
+import torchs2s.capture as capture
+import torchs2s.data as data
+from torchs2s.field import Field
+from torchs2s.utils import is_sequence, list_sub
 
 class Vocab():
-    def __init__(self, datasets, specials=None,
+    def __init__(self, handles,
                  max_size=None,
                  min_freq=1):
-        if specials is None:
-            specials = [] 
+        specials = [] 
 
-        pad_tokens = []
-        unk_tokens = []
-        for dataset in datasets:
-            if isinstance(dataset, Field):
-                field = dataset
+        pad_tokens = [] # place as 0
+        unk_tokens = [] # place as 1
+        for handle in handles:
+            if isinstance(handle, Field):
+                field = handle
                 specials += field.specials
                 pad_tokens.append(field.pad_token)
                 unk_tokens.append(field.unk_token)
@@ -30,19 +25,21 @@ class Vocab():
 
         # build vocab
 
-        c = VocabCounter()
-        for dataset in datasets:  
-            if isinstance(dataset, Field):
-                continue
-            elif isinstance(dataset, tuple):
-                dataset, tracker = dataset
-                utils.capture_and_process(
-                    dataset, tracker[0], tracker[1],
-                    capture=str,
-                    process=c.update_one,
-                    num_workers=1)
+        c = collections.Counter()
+        def recursive_add(v):
+            if is_sequence(v[0]):
+                for x in v:
+                    recursive_add(x)
             else:
-                c.update(dataset)
+                c.update(v)
+        
+        for handle in handles:  
+            if isinstance(handle, Field):
+                continue
+            elif isinstance(handle, tuple): # handle
+                capture.process_handle(handle, recursive_add, False)
+            else:
+                c.update(handle)
 
         for spec in specials:
             c.pop(spec, 0)
@@ -50,8 +47,7 @@ class Vocab():
         tokens = [token for token, freq in c.most_common(max_size)
                             if freq >= min_freq]
 
-        specials, _ = utils.list_sub(
-            specials, pad_tokens + unk_tokens)
+        specials, _ = list_sub(specials, pad_tokens + unk_tokens)
 
         self.itos = [self.pad_token] + [self.unk_token] + specials + tokens
         self.stoi = {s: i for i, s in enumerate(self.itos)} 
@@ -84,16 +80,13 @@ class Vocab():
     def __iter__(self):
         return iter(self.itos) 
 
-    def __call__(self, handles):
-        if isinstance(handles, tuple):
-            handles = [handles]
+    def recursive_numericalize(self, v):
+        for i, x in enumerate(v):
+            if is_sequence(x):
+                self.recursive_numericalize(x)
+            elif isinstance(x, str):
+                v[i] = self.stoi.get(x, 1)     
 
-        for handle in handles:
-            utils.capture_and_process(handle[0], handle[1][0], handle[1][1],
-                                      capture=str,
-                                      process=lambda s: self.stoi[s],
-                                      clone=True)
-                                      
+    def __call__(self, handles): 
+        capture.process_handle(handles, self.recursive_numericalize, False)
 
-if __name__ == '__main__':
-    pass

@@ -1,5 +1,7 @@
-from torchs2s.data import Field, FieldData, collate
+from torchs2s.field import Field
+from torchs2s.data import collate, PackedSeq
 from torchs2s.vocab import Vocab
+from torchs2s.capture import get_handle
 
 from torch.utils.data import DataLoader
 
@@ -14,20 +16,19 @@ class Dataset():
         return len(self.dts_tgt)
 
     def __getitem__(self, idx):
-        src = FieldData(self.dts_src[idx]).level('dialog')
-        tgt = FieldData(self.dts_tgt[idx])
+        src = PackedSeq(self.dts_src[idx]).dialog()
+        tgt = PackedSeq(self.dts_tgt[idx]).sentence()
         return src, tgt
 
 if __name__ == '__main__':
-    field = Field(delimiter='|||', 
-                  tokenizer=' ')
+    field = Field(delimiter='|||', tokenizer=' ')
     
     dataset = Dataset('../data/source.txt', '../data/target.txt') 
-    handle = field(dataset) 
-
+    
+    handle = get_handle(dataset, str)
+    field(handle)
     vocab = Vocab([field, handle], max_size=10000)  
-
-    vocab([handle]) 
+    vocab(handle) 
 
     loader = DataLoader(dataset, batch_size=64, shuffle=True,
                         collate_fn=collate, num_workers=0)  

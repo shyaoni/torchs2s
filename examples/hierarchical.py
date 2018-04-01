@@ -1,8 +1,7 @@
 import torchs2s.rnn as trnn
+from torchs2s.utils import mask
 
 import torch
-
-from IPython import embed
 
 import numpy as np
 
@@ -22,19 +21,10 @@ if __name__ == '__main__':
         inputs = torch.autograd.Variable(torch.randn(100, 10, 30, 100).cuda())
         lengths = torch.from_numpy(np.random.randint(100, size=(10, 30)))
         lengths = 100
-        outputs, final_states, lengths = model(inputs, max_lengths=lengths,
-                                               num_workers=1)
-
-        cnt = 0
-        mask = torch.zeros(10, 30).cuda()
-        for i, l in enumerate(lengths):
-            mask[:l, i] = 1
-            cnt += l
-
-        mask = torch.autograd.Variable(mask) 
+        outputs, final_states, lengths = model(inputs, max_lengths=lengths)
 
         loss = ((inputs[99, :, :, :] - outputs)**2).sum(dim=2)
-        loss = loss.sum() / cnt
+        loss = loss.sum() / 300 
 
         print(step, loss)
 
