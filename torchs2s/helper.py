@@ -2,21 +2,31 @@ import numpy as np
 
 import torch
 import torch.nn as tnn
-import torch.functional as tfunc
+import torch.nn.functional as tfunc
 from torch.autograd import Variable
 
 import torchs2s.utils as utils
 from torchs2s.tuplize import tuplizer as tur
 
+from IPython import embed
+
 class Helper():
-    def __init__(self, lengths=None):
+    def __init__(self, lengths=None, batch_size=None):
+        self.set_lengths(lengths, batch_size)
+
+    def set_lengths(self, lengths=None, batch_size=None):
+        if batch_size is not None:
+            self.batch_size = batch_size
+
         self.lengths = lengths
         if isinstance(self.lengths, torch.Tensor):
             self.lengths = lengths.tolist()
+            self.batch_size = len(lengths)
         elif isinstance(self.lengths, int): 
             self.lengths = [self.lengths,] * self.batch_size
         elif self.lengths is None:
             self.lengths = [inputs.shape[0],] * self.batch_size
+
 
 class TensorHelper(Helper):
     """A helper that use prior inputs to feed the rnn, usually used by encoders,
@@ -54,7 +64,7 @@ class TensorHelper(Helper):
 
         finished and next_input are then computed w.r.t. the selected inputs.
         """
-        if output is None:
+        if isinstance(output, int):
             index = self.index
         else:
             index = self.index[-tur.len(output, 0):]
@@ -78,14 +88,20 @@ class SoftmaxHelper(Helper):
                             Or an integer applied to the whole batch.
 
     """
-    def __init__(self, embedding, ending_idx=-1, lengths=None):
+    def __init__(self, embedding, bos_idx=2, eos_idx=3, lengths=None):
+        self.embedding_T = embedding.transpose(0, 1).contiguous()
         self.embedding = embedding
-        self.ending_idx = endding_idx
-        self.batch_size = 1      
-        super().__init__(int(1e8) if lengths is None else lengths)
+        self.eos_idx = eos_idx
+        self.bos_idx = bos_idx
+        super().__init__(int(1e8) if lengths is None else lengths, 1)
 
     def next(self, output, step=1): 
-        dist = tfunc.softmax(torch.mv(self.embedding, output), dim=1)
+        if isinstance(output, int):
+            return [], torch.stack([self.embedding[self.bos_idx],] * output, 0)
+  
+        batch_size = output.shape[0]
+
+        dist = tfunc.softmax(torch.mm(output, self.embedding_T), dim=1)
         next_input = torch.mm(dist, self.embedding)
 
         # get finished samples
@@ -95,12 +111,13 @@ class SoftmaxHelper(Helper):
 
         finished = []
         batch_size = output.shape[0]
+
         for i in range(batch_size):
             if len(self.lengths) > 1 and self.lengths[i] <= step:
                 finished.append(i)
             elif len(self.lengths) == 0 and self.lengths[0] <= step:
                 finished.append(i)
-            elif pred[i] == ending_idx:
+            elif pred[i] == self.eos_idx:
                 finished.append(i)
 
         return finished, next_input

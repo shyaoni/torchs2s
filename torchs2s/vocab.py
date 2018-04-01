@@ -12,16 +12,22 @@ class Vocab():
 
         pad_tokens = [] # place as 0
         unk_tokens = [] # place as 1
+        bos_tokens = []
+        eos_tokens = []
         for handle in handles:
             if isinstance(handle, Field):
                 field = handle
                 specials += field.specials
                 pad_tokens.append(field.pad_token)
                 unk_tokens.append(field.unk_token)
+                bos_tokens.append(field.bos_token)
+                eos_tokens.append(field.eos_token)
             
         specials = list(collections.Counter(specials).keys())
         self.pad_token = pad_tokens[0] 
         self.unk_token = unk_tokens[0]
+        self.eos_token = eos_tokens[0]
+        self.bos_token = bos_tokens[0]
 
         # build vocab
 
@@ -47,9 +53,11 @@ class Vocab():
         tokens = [token for token, freq in c.most_common(max_size)
                             if freq >= min_freq]
 
-        specials, _ = list_sub(specials, pad_tokens + unk_tokens)
+        specials, _ = list_sub(
+            specials, pad_tokens + unk_tokens + eos_tokens[:1] + bos_tokens[:1])
 
-        self.itos = [self.pad_token] + [self.unk_token] + specials + tokens
+        self.itos = [self.pad_token, self.unk_token, 
+                     self.bos_token, self.eos_token] + specials + tokens
         self.stoi = {s: i for i, s in enumerate(self.itos)} 
 
         for i in unk_tokens:

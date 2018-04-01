@@ -79,7 +79,7 @@ def rnn(cell, inputs=None,
     final_states = [0, ] * batch_size
     
     cur_outputs, not_finished = [], list(range(batch_size)) 
-    output, hidden, step = None, init_hidden, 0
+    output, hidden, step = batch_size, init_hidden, 0
     while hidden is not None:
         step += 1
         finished, x = helper.next(output, step=step)
