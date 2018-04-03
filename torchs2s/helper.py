@@ -36,12 +36,12 @@ class TensorHelper(Helper):
                             Or an integer applied to the whole batch.
     """
     def __init__(self, inputs, lengths=None):
-        self.inputs = inputs
+        self.inputs = tur.expand_to(inputs, 0, inputs.shape[0]+1)
         self.batch_size = tur.len(inputs, 1)
         super().__init__(inputs.shape[0] if lengths is None else lengths)
         self.index = np.argsort(self.lengths).tolist()
    
-    def next(self, output=None, step=1):
+    def next(self, output=None, step=0):
         """
         Args: 
             output (optional): Tensor(s) with shape (batch_size, ...). Use it 
@@ -72,9 +72,9 @@ class TensorHelper(Helper):
             if self.lengths[i] <= step:
                 finished.append(p) 
 
-        return finished, tur.get(self.inputs[step-1], sorted(index))
+        return finished, tur.get(self.inputs[step], sorted(index))
 
-class SoftmaxHelper(Helper):
+class GreedyHelper(Helper):
     """A helper for decoder during inference. In default, It uses dot product 
     to compute the similarities, and then apply softmax to compute the 
     distribution D. The sum over D is then regarded as the next input.
@@ -87,23 +87,22 @@ class SoftmaxHelper(Helper):
 
     """
     def __init__(self, embedding, bos_idx=2, eos_idx=3, lengths=None):
-        self.embedding_T = embedding.transpose(0, 1).contiguous()
         self.embedding = embedding
         self.eos_idx = eos_idx
         self.bos_idx = bos_idx
         super().__init__(int(1e8) if lengths is None else lengths, 1)
 
-    def next(self, output, step=1, **kwargs): 
+    def next(self, output, step=0, **kwargs): 
         if isinstance(output, int):
             return [], torch.stack([self.embedding[self.bos_idx],] * output, 0)
   
         batch_size = output.shape[0]
 
-        dist = tfunc.softmax(torch.mm(output, self.embedding_T), dim=1)
-        next_input = torch.mm(dist, self.embedding)
+        pred = output.max(dim=1)[1]
+
+        next_input = torch.index_select(self.embedding, 0, pred)
 
         # get finished samples
-        pred = dist.max(dim=1)[1]
         if isinstance(pred, Variable):
             pred = pred.data
 

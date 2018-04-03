@@ -95,7 +95,7 @@ def depadding(tensor, lengths):
             lsts.append(tensor[i, :lengths[i]].tolist())
     elif lengths.dim() == 2:
         lengths = lengths.transpose(0, 1).tolist()
-        batch_size, num_utts = tensor.shape[1], tensor.shape[2]
+        batch_size, num_utts = tensor.shape[2], tensor.shape[1]
         tensor = tensor.transpose(0, 2).contiguous() 
         for i in range(batch_size):
             lst = []

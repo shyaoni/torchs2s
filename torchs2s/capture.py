@@ -26,7 +26,7 @@ class TrackerState():
         return self.black == True or self.white == False
 
     def next(self, index):
-        if self.white == True:
+        if self.white == True or self.white == 2:
             next_white, next_index = True, index
         elif None in self.white:
             next_white, next_index = self.white[None], None
@@ -85,7 +85,7 @@ class Tracker():
 
         global special_char
         if rule[-1] == special_char:
-            node[rule[-1]] = 2
+            node[rule[-1]] = True
         else:
             node[rule[-1]] = True
 
@@ -213,8 +213,9 @@ class Processer():
                 self.recursive_process(data[i], i, data, trace)
         elif isinstance(data, tuple):
             parent[index] = list(data) 
+            data = parent[index]
             for i, x in enumerate(data):
-                self.recursive_process(data[i], x, data, trace)
+                self.recursive_process(data[i], i, data, trace)
         elif isinstance(data, dict): 
             for k, v in data.items():
                 self.recursive_process(v, k, data, trace)

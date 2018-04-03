@@ -79,21 +79,16 @@ def rnn(cell, inputs=None,
     final_states = [0, ] * batch_size
     
     cur_outputs, not_finished = [], list(range(batch_size)) 
-    output, hidden, step = batch_size, init_hidden, 0
+    output, hidden, step = batch_size, init_hidden, 0 
+    cur_batch_size = batch_size
     while hidden is not None:
-        step += 1
         finished, x = helper.next(output, step=step)
-        cur_batch_size = tur.len(x, 0)
 
         not_finished, subbed = utils.list_sub(not_finished, finished)
- 
-        output, hidden = cell(x, hidden)
-
-        cur_outputs.append(output)
-
+        
         for i in subbed:
             final_states[index_order[i]] = tur.get(hidden, i)
-            lengths[index_order[i]] = step
+            lengths[index_order[i]] = step 
 
         if reduced_fn(cur_batch_size, len(not_finished)): 
             if sum(not_finished)*2 == len(not_finished)*(len(not_finished)-1):
@@ -106,19 +101,21 @@ def rnn(cell, inputs=None,
             else:
                 if trival_reduced:
                     hidden = tur.get(hidden, slice(None, len(not_finished))) 
-                    output = tur.get(output, slice(None, len(not_finished)))
+                    x = tur.get(x, slice(None, len(not_finished)))
                 else:
                     hidden = tur.get(hidden, not_finished) 
-                    output = tur.get(output, not_finished)
-            
-            cur_outputs = tur.expand_to(
-                tur.stack(cur_outputs, dim=0), 1, batch_size) 
+                    x = tur.get(x, not_finished)
 
-            if trival_index_order:
-                outputs.append(cur_outputs)
-            else:
-                r_index = np.argsort(index_order).tolist()
-                outputs.append(tur.get(cur_outputs, slice(None), r_index))
+            if len(cur_outputs) != 0:
+                cur_outputs = tur.expand_to(
+                    tur.stack(cur_outputs, dim=0), 1, batch_size) 
+
+                if trival_index_order:
+                    outputs.append(cur_outputs)
+                else:
+                    r_index = np.argsort(index_order).tolist()
+                    outputs.append(tur.get(cur_outputs, slice(None), r_index))
+
             cur_outputs = []
 
             index_remain, index_subbed = utils.list_sub(
@@ -130,6 +127,12 @@ def rnn(cell, inputs=None,
             trival_index_order = trival_index_order & trival_reduced
 
             not_finished = list(range(len(not_finished)))
+            cur_batch_size = len(not_finished) 
+
+        if hidden is not None:
+            output, hidden = cell(x, hidden)
+            step += 1
+            cur_outputs.append(output)
 
     outputs = tur.cat(outputs, dim=0)
     final_states = tur.stack(final_states, dim=0)

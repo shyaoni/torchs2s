@@ -39,6 +39,10 @@ def load_from_glove(dim, vocab, path, **kwargs):
                 idx = vocab.stoi[word]
                 tensors[idx] = torch.FloatTensor([float(v) for v in vecs])
 
+    #for idx, value in enumerate(tensors):
+    #    if value is None:
+    #        print('not found: {}'.format(vocab.itos[idx]))
+
     return complete_with_init_func(dim, vocab, tensors, **kwargs)
 
 def load_from(dim, vocab, load=None, path=None, **kwargs):

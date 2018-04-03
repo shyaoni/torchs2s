@@ -64,9 +64,10 @@ class HierarchicalRNN(RNNBase):
             max_lengths=max_lengths,
             reduced_fn=kwargs.get('reduced_fn_minor', reduced_fn))
 
+        medium = kwargs.get('medium', self.medium) 
 
-        if self.medium is not None:
-            states_minor = self.medium(states_minor) 
+        if medium is not None:
+            states_minor = medium(states_minor) 
         elif isinstance(states_minor, collections.Sequence):
             states_minor = tur.views(states_minor, slice(None,1), -1)  
             states_minor = torch.cat(states_minor, dim=1)
@@ -86,39 +87,39 @@ class RNNCell(torch.nn.RNNCell):
         super().__init__(input_size, hidden_size, bias, nonlinearity)
 
         self.register_buffer('default_h',
-                             Variable(torch.zeros(hidden_size)))
+                             torch.zeros(hidden_size))
 
     def forward(self, x, hidden):
         h = super().forward(x, hidden)
         return h, h
 
     def init_hidden(self):
-        return self.default_h
+        return Variable(self.default_h)
 
 class LSTMCell(torch.nn.LSTMCell):
     def __init__(self, input_size, hidden_size, bias=True):
         super().__init__(input_size, hidden_size, bias)
 
         self.register_buffer('default_h',
-                             Variable(torch.zeros(hidden_size)))
+                             torch.zeros(hidden_size))
     
     def forward(self, x, hidden):
         h, c = super().forward(x, hidden)
         return c, (h, c)
 
     def init_hidden(self):
-        return (self.default_h, self.default_h)
+        return (Variable(self.default_h), Variable(self.default_h))
 
 class GRUCell(torch.nn.GRUCell):
     def __init__(self, input_size, hidden_size, bias=True):
         super().__init__(input_size, hidden_size, bias=True)
 
         self.register_buffer('default_h', 
-                             Variable(torch.zeros(hidden_size)))
+                             torch.zeros(hidden_size))
 
     def forward(self, x, hidden):
         h = super().forward(x, hidden)
         return h, h
 
     def init_hidden(self):
-        return self.default_h
+        return Variable(self.default_h)
