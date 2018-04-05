@@ -1,6 +1,20 @@
 import torch
 from torch.autograd import Variable
 
+def cvt(a, b, type_as=True):
+    if a.is_cuda == False and b.is_cuda == True:
+        a = a.cuda()
+    elif a.is_cuda == True and b.is_cuda == False:
+        a = a.cpu()
+        
+    if isinstance(b, Variable) and not isinstance(a, Variable):
+        a = Variable(a)
+    elif not isinstance(b, Variable) and isinstance(a, Variable):
+        a = a.data
+    if type_as:
+        a = a.type_as(b)
+    return a
+
 def is_tensor(tensor):
     """check whether tensor is a Variable, FloatTensor, LongTensor
     """

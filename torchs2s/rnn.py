@@ -82,44 +82,64 @@ class HierarchicalRNN(RNNBase):
 
         return outputs_major, states_major, lengths 
 
-class RNNCell(torch.nn.RNNCell):
-    def __init__(self, input_size, hidden_size, bias=True, nonlinearity='tanh'):
-        super().__init__(input_size, hidden_size, bias, nonlinearity)
+class RNNCellBase(tnn.Module):
+    def __init__(self, dropout=None, mlp=None):
+        super().__init__()
+        if dropout is not None:
+            self.dropout = tnn.Dropout(dropout)
+        else:
+            self.dropout = None
+        self.mlp = mlp 
+
+    def out_cvt(self, output):
+        if self.dropout is not None:
+            output = self.dropout(output)
+        if self.mlp is not None:
+            output = self.mlp(output)
+        return output 
+
+class RNNCell(RNNCellBase):
+    def __init__(self, input_size, hidden_size, bias=True, 
+                 nonlinearity='tanh', **kwargs):
+        super().__init__(**kwargs)
+        self.cell = tnn.RNNCell(input_size, hidden_size, bias, nonlinearity)
 
         self.register_buffer('default_h',
                              torch.zeros(hidden_size))
 
     def forward(self, x, hidden):
-        h = super().forward(x, hidden)
-        return h, h
+        h = self.cell(x, hidden)
+        return self.out_cvt(h), h
 
     def init_hidden(self):
         return Variable(self.default_h)
 
-class LSTMCell(torch.nn.LSTMCell):
-    def __init__(self, input_size, hidden_size, bias=True):
-        super().__init__(input_size, hidden_size, bias)
+class LSTMCell(RNNCellBase):
+    def __init__(self, input_size, hidden_size, bias=True, **kwargs):
+        super().__init__(**kwargs)
+        self.cell = tnn.LSTM(input_size, hidden_size, bias)
 
         self.register_buffer('default_h',
                              torch.zeros(hidden_size))
     
     def forward(self, x, hidden):
-        h, c = super().forward(x, hidden)
-        return c, (h, c)
+        h, c = self.cell(x, hidden)
+        return self.out_cvt(h), (h, c)
 
     def init_hidden(self):
         return (Variable(self.default_h), Variable(self.default_h))
 
-class GRUCell(torch.nn.GRUCell):
-    def __init__(self, input_size, hidden_size, bias=True):
-        super().__init__(input_size, hidden_size, bias=True)
+class GRUCell(RNNCellBase):
+    def __init__(self, input_size, hidden_size, bias=True, **kwargs):
+        super().__init__(**kwargs)
+        self.cell = tnn.GRUCell(input_size, hidden_size, bias=True)
 
         self.register_buffer('default_h', 
                              torch.zeros(hidden_size))
 
     def forward(self, x, hidden):
-        h = super().forward(x, hidden)
-        return h, h
+        h = self.cell(x, hidden)
+        return self.out_cvt(h), h
 
     def init_hidden(self):
         return Variable(self.default_h)

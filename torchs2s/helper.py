@@ -66,13 +66,18 @@ class TensorHelper(Helper):
             index = self.index
         else:
             index = self.index[-tur.len(output, 0):]
+        
+        index = sorted(index)
 
         finished = []
-        for p, i in enumerate(sorted(index)):
+        for p, i in enumerate(index):
             if self.lengths[i] <= step:
                 finished.append(p) 
 
-        return finished, tur.get(self.inputs[step], sorted(index))
+        if index[0] + len(index) - 1 == index[-1]:
+            index = slice(index[0], index[-1] + 1)
+
+        return finished, tur.get(self.inputs[step], index)
 
 class GreedyHelper(Helper):
     """A helper for decoder during inference. In default, It uses dot product 

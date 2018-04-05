@@ -9,8 +9,6 @@ import torchs2s.utils as utils
 
 import collections
 
-from IPython import embed
-
 class ReducedFunc():
     @staticmethod
     def halver(a, b):
@@ -55,7 +53,11 @@ def rnn(cell, inputs=None,
                                is more than half.
     """
     if helper is None:
+        max_lengths, indices = max_lengths.sort()
+        inputs = inputs.index_select(1, utils.cvt(indices, inputs, False))
         helper = TensorHelper(inputs, lengths=max_lengths)
+    else:
+        indices = None
 
     if init_hidden is None:
         batch_size = helper.batch_size
@@ -81,6 +83,8 @@ def rnn(cell, inputs=None,
     cur_outputs, not_finished = [], list(range(batch_size)) 
     output, hidden, step = batch_size, init_hidden, 0 
     cur_batch_size = batch_size
+
+    global t
     while hidden is not None:
         finished, x = helper.next(output, step=step)
 
@@ -136,6 +140,15 @@ def rnn(cell, inputs=None,
 
     outputs = tur.cat(outputs, dim=0)
     final_states = tur.stack(final_states, dim=0)
+
+    if indices is not None:
+        indices = indices.sort()[1]
+        outputs = tur.index_select(
+            outputs, 1, utils.cvt(indices, outputs, False))
+        final_states = tur.index_select(
+            final_states, 0, utils.cvt(indices, final_states, False))
+        lengths = tur.index_select(
+            lengths, 0, utils.cvt(indices, lengths, False))
 
     return outputs, final_states, lengths
 

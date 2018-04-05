@@ -1,0 +1,6 @@
+README.md
+torchs2s.egg-info/PKG-INFO
+torchs2s.egg-info/SOURCES.txt
+torchs2s.egg-info/dependency_links.txt
+torchs2s.egg-info/requires.txt
+torchs2s.egg-info/top_level.txt

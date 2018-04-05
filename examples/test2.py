@@ -3,14 +3,14 @@ from torchs2s.utils import mask
 
 import torch
 
-import torchs2s.functions as func
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 import numpy as np
 
-torch.cuda.set_device(0)
+torch.cuda.set_device(1)
 
 if __name__ == '__main__':
-    model = RNN(RNNCell(100, 64))
+    model = torch.nn.RNN(100, 64)
     model.cuda()
 
     optimizer = torch.optim.Adam(model.parameters())
@@ -18,9 +18,9 @@ if __name__ == '__main__':
     step = 0
 
     from time import time
-    
+
     t = 0
-    for i in range(100):
+    for i in range(1000):
         inputs = torch.autograd.Variable(torch.randn(100, 64, 100).cuda())
         lengths = torch.from_numpy(np.random.randint(100, size=(64, )) + 1)
         lengths[0] = 100
@@ -28,9 +28,10 @@ if __name__ == '__main__':
         lengths, indices = lengths.sort(descending=True)
 
         s = time()
-        outputs, final_states, lengths = model(inputs, max_lengths=lengths,
-                                               reduced_fn='every')
-        t += time() - s
+        outputs, states = model(pack_padded_sequence(inputs, lengths.tolist()))
+
+
+        outputs = pad_packed_sequence(outputs)[0]
 
         cnt = 0
 
@@ -43,9 +44,8 @@ if __name__ == '__main__':
         optimizer.zero_grad() 
         loss.backward()
         optimizer.step()
+        t += time() - s
 
         step += 1
 
-    print(func.t / 100)
-
-    print(t / 100)
+    print(t / 1000)

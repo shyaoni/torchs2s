@@ -3,6 +3,7 @@ from torchs2s.utils import is_sequence
 import torchs2s.capture as capture
 
 import torch
+from torch.autograd import Variable
 from torch.utils.data.dataloader import default_collate
 
 import numpy as np
@@ -86,6 +87,9 @@ def get_shape_of_packed_seq(seqs):
     return shape.tolist()
 
 def depadding(tensor, lengths):
+    if isinstance(tensor, Variable):
+        tensor = tensor.data
+
     lsts = []
     if lengths.dim() == 1:
         lengths = lengths.tolist()
